@@ -1,85 +1,61 @@
-# Bloom Filter Implementation in C
+# Bloom Filter, in C, with the receipts
 
-This repository contains an implementation of a Bloom Filter data structure written in C. It provides functionalities to create filters, add entries, and test for set membership with a focus on analyzing space and time efficiency. The project also includes comparative tests against Hashmaps and Binary Search Trees.
+A from-scratch Bloom filter in plain C — but the actual point of this project wasn't writing the filter, it was proving it. Alongside the implementation there's a full experimental suite that measures false-positive rates and benchmarks the filter against a hash table and a binary search tree across hundreds of thousands of insertions, to see whether the textbook math actually holds up in practice.
 
-## Project Structure
+Spoiler: it does, closely enough that the recorded optimal-k curve nearly overlaps the theoretical one (see below).
 
-- `bin/`: Contains the compiled executable binary.
-- `data/`: Contains input data files (e.g., word banks and generated words) used for testing the filter.
-- `doc/`: Contains project documentation, including the final report.
-- `include/`: Contains C header files (`.h`).
-- `obj/`: Contains compiled object files (`.o`).
-- `src/`: Contains C source files (`.c`).
-- `stats/`: Stores generated statistical data from false positive tests.
+## How it works
 
-## Build Instructions
+A Bloom filter trades certainty for space: it can tell you "definitely not in the set" for free, and "probably in the set" for almost nothing. Every insert sets `k` bits in a shared bit array; every lookup checks the same `k` positions and answers `no` if any of them is unset, `maybe` otherwise — false positives are possible, false negatives never are.
 
-This project uses `make` for compilation. A GCC compiler is required.
+Rather than implementing `k` independent hash functions, `hash()` (`filter.c`) uses one rolling multiplicative hash reseeded with a random per-function "weight" for each of the `k` slots — simpler than maintaining a family of real hash functions, and empirically good enough that the false-positive curves below track theory almost exactly.
 
-To build the project, run the following command from the root directory:
+## Try it
 
 ```sh
-make
+make                 # builds bin/bloom_filter
+./bin/bloom_filter    # interactive menu: create a filter, insert, query, run the stats suite
 ```
-
-This will compile the source code and place the executable `bloom_filter` inside the `bin/` directory.
-
-To clean the compiled object files and the binary, run:
-
-```sh
-make clean
-```
-
-## Running the Application
-
-After a successful build, you can run the interactive menu using:
-
-```sh
-./bin/bloom_filter
-```
-
-Once the application is running, it will present a menu with several basic commands to interact with the Bloom Filter (e.g., create a filter, insert an entry, read from a file, run statistical tests).
 
 <div align="center">
   <img src="doc/command.png" alt="Menu Commands">
 </div>
 
-## Experimental Results & Analysis
+## Does the theory hold up?
 
-This project not only implements a Bloom Filter but also empirically validates its theoretical properties. We conducted several experiments to analyze the false-positive rate behavior under various configurations and benchmarked its performance against Hash Tables and Binary Search Trees (BST). 
-
-The results demonstrate that the theoretical characteristics of Bloom Filters hold remarkably true in practical application.
-
-### 1. Impact of Filter Size (m) on False Positives
-With a fixed number of hash functions ($k$), increasing the size of the bit array ($m$) drastically reduces the false positive rate. The empirical data confirms that a larger filter accommodates more elements before saturation, maintaining high query accuracy.
+### Filter size (m) vs. false positives
+Fixing `k` and growing the bit array `m` should push false positives down. It does:
 
 <div align="center">
   <img src="doc/m_variable_k_fixed.png" alt="False Positives with Fixed k">
 </div>
 
-### 2. Impact of Hash Functions (k) on False Positives
-Conversely, when the filter size ($m$) is fixed, aggressively increasing the number of hash functions ($k$) will eventually degrade performance. Each additional hash function sets more bits per insertion, causing the filter to fill up rapidly and consequently increasing the false positive rate.
+### Hash function count (k) vs. false positives
+Fixing `m` and cranking up `k` helps at first, then backfires — each extra hash function sets more bits per insert, so the array saturates faster and false positives climb back up:
 
 <div align="center">
   <img src="doc/m_fixed_k_variable.png" alt="False Positives with Fixed m">
 </div>
 
-### 3. Theoretical vs. Practical Optimal k
-According to Bloom Filter theory, the optimal number of hash functions to minimize false positives for a given $m$ and number of inserted elements $n$ is calculated as $k \approx \frac{m}{n} \ln(2)$. Our empirical results closely trace this theoretical projection, proving the real-world reliability of the mathematical model.
+### The optimal k formula, checked against reality
+Theory says the false-positive-minimizing `k` is `k ≈ (m/n)·ln(2)`. Plotting the empirically-measured best `k` against this formula:
+
 <div align="center">
   <img src="doc/recorded_theoretical_k.png" alt="Theoretical vs Recorded Optimal k" width="400">
 </div>
 
-### 4. Space and Time Complexity Benchmarks
-To validate its efficiency, the Bloom Filter was benchmarked against a Hash Table and a Binary Search Tree across up to 400,000 insertions.
-
-- **Time Complexity**: The insertion and lookup times of the Bloom Filter approach those of a highly optimized Hash Table, proving it to be exceptionally fast (constant $O(k)$ time complexity).
-- **Space Complexity**: As demonstrated below, the Bloom Filter requires a mere fraction of the memory consumed by both the Hash Table and the BST. 
+### Space and time, vs. a hash table and a BST
+Benchmarked head-to-head with a custom chained hash table and BST up to 400,000 insertions: the Bloom filter's time stays close to the hash table's (both effectively O(k)/O(1)), while its memory footprint is a small fraction of either — no keys are ever stored, only bits.
 
 <div align="center">
   <img src="doc/time_&_space.png" alt="Time and Space Comparison">
 </div>
 
-These findings confirm that the Bloom Filter is an exceptionally powerful data structure for scenarios demanding high-speed membership queries with stringent memory constraints.
+The full write-up (French) is in [`doc/rapport.pdf`](doc/rapport.pdf).
 
-For the complete, in-depth analysis (in French), please refer to the [project report](doc/rapport.pdf).
+## Project layout
+
+- `src/` / `include/` — the filter itself (`filter.c`), the underlying bit array, the comparison hash table and BST, the benchmarking harness, and the interactive menu.
+- `data/` — word banks used to generate test keys.
+- `stats/` — raw output from the false-positive experiments.
+- `doc/` — the report and the charts above.
